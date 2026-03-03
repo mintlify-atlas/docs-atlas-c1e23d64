@@ -1,0 +1,149 @@
+---
+title: Flags reference
+description: Detailed reference for all dirty CLI flags and options
+---
+
+This page provides detailed documentation for all available flags in the dirty CLI tool.
+
+## Positional arguments
+
+<ParamField path="path" type="string" required>
+  Directory to scan for git repositories. The tool will recursively search for `.git` folders up to the specified depth.
+
+  ```bash
+  dirty ~/code
+  dirty /Users/john/projects
+  dirty .
+  ```
+</ParamField>
+
+## Flags
+
+### Search depth
+
+<ParamField path="--depth" type="number" default="3">
+  **Short form:** `-L`
+
+  Maximum directory depth to search for repositories. Depth 0 checks only the specified path, depth 1 checks immediate subdirectories, and so on.
+
+  ```bash
+  # Only check immediate subdirectories
+  dirty -L 1 ~/code
+
+  # Deep search up to 5 levels
+  dirty -L 5 ~/projects
+  ```
+
+  **Note:** The search stops when a `.git` folder is found, so nested repositories within a repository are not scanned.
+</ParamField>
+
+### Filtering
+
+<ParamField path="--dirty" type="boolean" default="false">
+  **Short form:** `-d`
+
+  Only show repositories with uncommitted changes. This includes both tracked modified files and untracked files.
+
+  ```bash
+  # Find all dirty repos
+  dirty -d ~/code
+  ```
+
+  Useful for finding repositories with work in progress before switching contexts.
+</ParamField>
+
+<ParamField path="--local" type="boolean" default="false">
+  **Short form:** `-l`
+
+  Only show repositories with no remotes configured (local-only repositories).
+
+  ```bash
+  # Find repos with no remotes
+  dirty -l ~/code
+  ```
+
+  Useful for identifying experimental or local-only projects that may need to be backed up or pushed to a remote.
+</ParamField>
+
+<ParamField path="--include-unpushed" type="boolean" default="false">
+  **Short form:** `-u`
+
+  Include unpushed commit information in the output. Shows how many commits the current branch is ahead of its upstream tracking branch.
+
+  ```bash
+  # Show repos with unpushed commits
+  dirty -u ~/code
+  ```
+
+  Example output with unpushed commits:
+  ```
+   * apps/dashboard [↑3]
+     apps/storefront
+   * libs/ui-kit [local]
+  ```
+
+  **Performance note:** This flag requires resolving the upstream tracking branch for each repository, which is slower than the default behavior. Only use this flag when you need to check for unpushed commits.
+</ParamField>
+
+### Output format
+
+<ParamField path="--raw" type="boolean" default="false">
+  **Short form:** `-r`
+
+  Output raw repository paths only, one per line, with no decorations or summary. Useful for piping to other commands.
+
+  ```bash
+  # Raw output for piping
+  dirty -r ~/code
+
+  # Example: open all dirty repos in VS Code
+  dirty -dr ~/code | xargs -I {} code {}
+  ```
+
+  Raw output example:
+  ```
+  apps/dashboard
+  libs/ui-kit
+  services/auth
+  tools/scripts
+  ```
+</ParamField>
+
+## Flag combinations
+
+Flags can be combined to create powerful workflows:
+
+### Find dirty local-only repos
+
+```bash
+dirty -dl ~/code
+```
+
+Shows repositories that have both uncommitted changes AND no remotes configured. Useful for finding work that needs to be committed and potentially pushed to a new remote.
+
+### Export dirty repos for scripting
+
+```bash
+dirty -dr ~/code | while read repo; do
+  echo "Processing $repo"
+  # Add your custom logic here
+done
+```
+
+Combines the dirty filter with raw output for easy processing in shell scripts.
+
+### Quick shallow scan
+
+```bash
+dirty -L 1 ~/code
+```
+
+Scans only immediate subdirectories for faster results when you have a flat project structure.
+
+### Complete status check
+
+```bash
+dirty -u ~/code
+```
+
+Shows all repositories with full status including uncommitted changes, local-only status, and unpushed commits. More comprehensive but slower due to upstream branch resolution.

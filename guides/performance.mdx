@@ -1,0 +1,267 @@
+---
+title: Performance characteristics
+description: Understanding how Dirty achieves fast repository scanning and how to optimize performance
+---
+
+Dirty is designed to be fast, even when scanning directories with many repositories. This guide explains how it works and how to optimize performance.
+
+## How Dirty works
+
+Dirty's performance comes from three key design decisions:
+
+<Steps>
+
+### Parallel scanning with rayon
+
+Dirty uses the [rayon](https://crates.io/crates/rayon) crate to inspect repositories in parallel. After finding all repository paths, it processes them concurrently across multiple CPU cores.
+
+```rust
+// From main.rs:119-123
+let infos: Vec<_> = repos
+    .par_iter()
+    .filter_map(|p| inspect_repo(p, args.include_unpushed))
+    .filter(|i| (!args.dirty || i.dirty) && (!args.local || i.local_only))
+    .collect();
+```
+
+### Direct git access with libgit2
+
+Instead of spawning `git` processes, Dirty uses [libgit2](https://libgit2.org/) via the [git2](https://crates.io/crates/git2) crate to access repository data directly. This eliminates process spawning overhead.
+
+```rust
+// From main.rs:89-96
+let repo = Repository::open(path).ok()?;
+
+let mut opts = StatusOptions::new();
+opts.include_untracked(true)
+    .recurse_untracked_dirs(false)
+    .exclude_submodules(true);
+let dirty = !repo.statuses(Some(&mut opts)).ok()?.is_empty();
+let local_only = repo.remotes().ok().is_none_or(|r| r.is_empty());
+```
+
+### Limited depth by default
+
+By default, Dirty only searches 3 levels deep. This balances speed with coverage for typical directory structures.
+
+</Steps>
+
+## Default depth of 3
+
+The default depth of 3 is optimized for common project layouts:
+
+```
+~/code/               # depth 0
+├── projects/         # depth 1
+│   ├── app/          # depth 2 (repo)
+│   └── lib/          # depth 2 (repo)
+└── personal/         # depth 1
+    └── tools/        # depth 2
+        └── scripts/  # depth 3 (repo)
+```
+
+<Info>
+Depth is measured from the starting directory. A repo at depth 3 means there are 3 directory levels between the start path and the repository.
+</Info>
+
+### Why depth 3?
+
+- **Fast scanning**: Limits filesystem traversal
+- **Typical coverage**: Most developers organize code 1-3 levels deep
+- **Predictable performance**: Prevents accidentally scanning entire home directories
+
+## Adjusting depth with -L flag
+
+Use the `-L` flag to control how deep Dirty searches:
+
+```bash
+# Faster: only immediate subdirectories
+dirty -L 1 ~/code
+
+# Deeper: search up to 5 levels
+dirty -L 5 ~/code
+
+# Very deep: search up to 10 levels (slower)
+dirty -L 10 ~/code
+```
+
+<Tip>
+Start with `-L 1` or `-L 2` for faster scans of well-organized directories. Increase depth only if repositories are being missed.
+</Tip>
+
+### Finding the right depth
+
+If you see "No git repos found", try increasing the depth:
+
+```bash
+# Test different depths to find repositories
+dirty -L 1 ~/code  # Fast but might miss nested repos
+dirty -L 3 ~/code  # Default balance
+dirty -L 5 ~/code  # Slower but more thorough
+```
+
+## Performance note: --include-unpushed flag
+
+The `--include-unpushed` flag shows how many commits ahead of upstream each repository is, but it's significantly slower:
+
+```rust
+// From main.rs:26-28
+/// Include unpushed commit info (ahead of upstream) in the output
+///
+/// Note: this requires resolving the upstream tracking branch, which is slower,
+/// so it is only computed when this flag is set.
+```
+
+### Why is it slower?
+
+Checking unpushed commits requires:
+
+1. Resolving the upstream tracking branch
+2. Computing graph distance between HEAD and upstream
+3. Handling edge cases (detached HEAD, no upstream, etc.)
+
+```bash
+# Fast: basic status check
+dirty ~/code
+
+# Slower: includes unpushed commit counts
+dirty --include-unpushed ~/code
+```
+
+<Warning>
+Only use `--include-unpushed` when you need unpushed commit information. For general scans, omit this flag for better performance.
+</Warning>
+
+## Handling large monorepo directories
+
+Dirty is optimized for scanning multiple repositories, not for inspecting large individual repositories.
+
+### Stopping at .git directories
+
+Dirty stops descending into subdirectories once it finds a `.git` folder:
+
+```rust
+// From main.rs:55-58
+if dir.join(".git").exists() {
+    repos.push(dir.to_path_buf());
+    return;  // Stop recursing
+}
+```
+
+This means:
+
+- **Large repos don't slow down scanning**: Dirty won't traverse a monorepo's entire file tree
+- **Nested repos are skipped**: Only the top-level repository is detected
+
+```
+monorepo/
+├── .git/              # Dirty finds this
+├── packages/
+│   └── nested-repo/
+│       └── .git/      # This is NOT scanned (inside a repo)
+└── ...
+```
+
+<Note>
+If you have intentionally nested git repositories (not submodules), only the outermost repository will be detected.
+</Note>
+
+### Symbolic links are skipped
+
+Dirty does not follow symbolic links to avoid infinite loops and duplicate scanning:
+
+```rust
+// From main.rs:64
+if path.is_dir() && !path.is_symlink() {
+    collect_repos(&path, max_depth, depth + 1, repos);
+}
+```
+
+If your repositories are behind symlinks, you'll need to scan the actual directories:
+
+```bash
+# Won't find repos behind symlink
+dirty ~/symlink-to-code
+
+# Will find repos
+dirty ~/actual-code-directory
+```
+
+## Tips for optimal performance
+
+<Steps>
+
+### Scan specific subdirectories
+
+Instead of scanning your entire home directory, target specific code directories:
+
+```bash
+# Slow: scans everything
+dirty ~ -L 5
+
+# Fast: scans only code directory
+dirty ~/code -L 3
+```
+
+### Use filters to reduce output processing
+
+Filtering happens during scanning, so filters don't significantly impact performance:
+
+```bash
+# Same speed: filtering is efficient
+dirty --dirty ~/code
+dirty --local ~/code
+dirty --dirty --local ~/code
+```
+
+### Avoid unnecessary --include-unpushed
+
+Only use `--include-unpushed` when you specifically need unpushed commit counts:
+
+```bash
+# Fast: general status check
+dirty ~/code
+
+# Slow: includes upstream comparisons
+dirty --include-unpushed ~/code
+```
+
+### Lower depth for faster CI/automation
+
+In CI environments or scripts where you know repository locations, use lower depth:
+
+```bash
+# Fast: depth 1 for flat structures
+dirty -L 1 /workspace
+```
+
+</Steps>
+
+## Performance characteristics
+
+### Time complexity
+
+- **Directory traversal**: O(d × n) where d is depth and n is average directories per level
+- **Repository inspection**: O(r) where r is number of repositories (parallelized)
+- **With --include-unpushed**: O(r × b) where b is branch resolution time
+
+### Memory usage
+
+- **Low memory footprint**: Dirty collects repository paths first, then processes them
+- **No file content loading**: Only git metadata is read
+- **Sorted output**: Repository paths are sorted before inspection
+
+### Typical performance
+
+```bash
+# Example: scanning 50 repositories
+# Depth 3, no --include-unpushed
+# Time: ~100-300ms on modern hardware
+
+# With --include-unpushed
+# Time: ~500ms-2s depending on network
+```
+
+<Tip>
+Performance varies based on filesystem speed, CPU cores, and repository sizes. SSD storage significantly improves directory traversal speed.
+</Tip>

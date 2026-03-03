@@ -1,0 +1,71 @@
+---
+title: Installation
+description: Install Dirty via Cargo to start scanning your git repositories
+---
+
+## Prerequisites
+
+Before installing Dirty, ensure you have the Rust toolchain installed on your system. If you don't have Rust installed, visit [rustup.rs](https://rustup.rs) to install it.
+
+<Note>
+Dirty requires Rust to compile from source. The installation process will handle compilation automatically.
+</Note>
+
+## Install Dirty
+
+<Steps>
+  <Step title="Install via Cargo">
+    Run the following command to install Dirty directly from the GitHub repository:
+    
+    ```bash
+    cargo install --git https://github.com/iamkaf/dirty
+    ```
+    
+    This will download the source code, compile the binary with optimizations, and install it to your Cargo bin directory (usually `~/.cargo/bin`).
+  </Step>
+  
+  <Step title="Verify the installation">
+    Confirm that Dirty is installed correctly by checking the help output:
+    
+    ```bash
+    dirty --help
+    ```
+    
+    You should see output similar to:
+    
+    ```
+    List git repos, their dirty status, and whether they're local-only
+    
+    Usage: dirty [OPTIONS] <PATH>
+    
+    Arguments:
+      <PATH>  Directory to scan
+    
+    Options:
+      -L <DEPTH>           Max depth to search for repos [default: 3]
+      -d, --dirty          Only show dirty repos
+      -l, --local          Only show local-only repos (no remotes)
+      -u, --include-unpushed  Include unpushed commit info (ahead of upstream)
+      -r, --raw            Raw output for piping (one path per line)
+      -h, --help           Print help
+    ```
+  </Step>
+  
+  <Step title="Add to PATH (if needed)">
+    If the `dirty` command is not found, ensure that `~/.cargo/bin` is in your PATH:
+    
+    ```bash
+    export PATH="$HOME/.cargo/bin:$PATH"
+    ```
+    
+    Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
+  </Step>
+</Steps>
+
+<Tip>
+The compiled binary includes link-time optimization (LTO) and is stripped for minimal size and maximum performance.
+</Tip>
+
+## Next steps
+
+Now that you have Dirty installed, head over to the [Quickstart](/quickstart) guide to learn how to use it.

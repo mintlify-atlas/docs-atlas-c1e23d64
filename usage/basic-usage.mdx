@@ -1,0 +1,81 @@
+---
+title: Basic usage
+description: Learn how to scan directories and understand the output
+---
+
+## Scanning a directory
+
+To scan a directory for git repositories, use the `dirty` command followed by a path:
+
+```bash
+dirty ~/code
+```
+
+This will recursively search for git repositories and display their status.
+
+## Understanding the output
+
+Here's an example of what the output looks like:
+
+```bash
+$ dirty ~/code
+ * apps/dashboard
+   apps/storefront
+ * libs/ui-kit [local]
+   libs/common
+ * services/auth
+   services/payments
+   tools/cli [local]
+ * tools/scripts [local]
+
+8 repos, 4 dirty, 3 local-only
+```
+
+### Status indicators
+
+Each repository is displayed with status indicators:
+
+- **`*`** — Repository has uncommitted changes (displayed in red)
+- **`[local]`** — Repository has no remotes configured (displayed in yellow)
+
+Repositories without these markers are clean and have at least one remote configured.
+
+<Info>
+The asterisk (`*`) appears for any uncommitted or untracked changes, including modified files, staged changes, or new untracked files.
+</Info>
+
+## Search depth
+
+By default, `dirty` searches up to **3 levels deep** from the specified directory:
+
+```bash
+# Uses default depth of 3
+dirty ~/projects
+
+# Search only immediate subdirectories
+dirty -L 1 ~/projects
+
+# Search deeper (5 levels)
+dirty -L 5 ~/projects
+```
+
+<Note>
+The search stops when it finds a `.git` folder. Nested repositories inside another repository are not scanned.
+</Note>
+
+## Summary line
+
+At the bottom of the output, you'll see a summary line:
+
+```
+8 repos, 4 dirty, 3 local-only
+```
+
+This shows:
+- **Total repositories found** (8 repos)
+- **Repositories with uncommitted changes** (4 dirty)
+- **Repositories without remotes** (3 local-only)
+
+<Tip>
+Use the `-L` flag to adjust the search depth if you have a deeply nested project structure or want to scan only immediate subdirectories.
+</Tip>

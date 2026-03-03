@@ -1,0 +1,65 @@
+---
+title: Command overview
+description: Learn the basic syntax and usage of the dirty CLI tool
+---
+
+Dirty is a fast CLI tool that scans directories for git repositories and shows which ones have uncommitted changes and which are local-only (no remote configured).
+
+## Syntax
+
+```bash
+dirty <path> [flags]
+```
+
+## Basic usage
+
+Scan a directory for git repositories:
+
+```bash
+dirty ~/code
+```
+
+Example output:
+
+```
+ * apps/dashboard
+   apps/storefront
+ * libs/ui-kit [local]
+   libs/common
+ * services/auth
+   services/payments
+   tools/cli [local]
+ * tools/scripts [local]
+
+8 repos, 4 dirty, 3 local-only
+```
+
+**Output indicators:**
+- `*` (red) — repository has uncommitted changes
+- `[local]` (yellow) — repository has no remotes configured
+- `[↑n]` (blue) — repository has n unpushed commits (when using `-u` flag)
+
+## Quick reference
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `<path>` | — | (required) | Directory to scan for repositories |
+| `--depth` | `-L` | `3` | Max directory depth to search |
+| `--dirty` | `-d` | off | Only show repos with uncommitted changes |
+| `--local` | `-l` | off | Only show repos with no remotes |
+| `--include-unpushed` | `-u` | off | Include unpushed commit info (slower) |
+| `--raw` | `-r` | off | Raw output for piping (one path per line) |
+
+See the [detailed flags reference](/commands/flags) for more information.
+
+## Exit codes
+
+Dirty uses standard Unix exit codes:
+
+- **0** (success) — Found repositories matching the specified criteria
+- **1** (failure) — No git repositories found, no matching repositories, or error accessing the path
+
+Error conditions:
+- Path does not exist or cannot be accessed
+- No git repositories found in the scanned directories
+- No repositories match the filter criteria (when using `-d` or `-l` flags)

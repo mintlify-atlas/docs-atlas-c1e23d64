@@ -1,0 +1,77 @@
+---
+title: Introduction
+description: A fast CLI tool for finding git repositories with uncommitted changes and local-only repos
+---
+
+## What is Dirty?
+
+Dirty is a fast CLI tool written in Rust that scans directories for git repositories and instantly shows you which ones have uncommitted changes and which are local-only (no remote configured).
+
+Perfect for developers managing multiple projects across a monorepo or workspace, Dirty helps you quickly identify work in progress and repos that haven't been pushed to a remote.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Fast parallel scanning" icon="bolt">
+    Uses Rust's rayon for parallel processing and libgit2 for lightning-fast repo inspection
+  </Card>
+  
+  <Card title="Uncommitted changes detection" icon="file-pen">
+    Instantly see which repos have dirty working directories with untracked or modified files
+  </Card>
+  
+  <Card title="Local-only repo detection" icon="laptop">
+    Identify repositories that have no remotes configured, helping you avoid losing work
+  </Card>
+  
+  <Card title="Configurable depth and filtering" icon="sliders">
+    Control how deep to search and filter results to show only dirty or local-only repos
+  </Card>
+  
+  <Card title="Unpushed commits tracking" icon="arrow-up">
+    Optionally show how many commits are ahead of upstream for each repository
+  </Card>
+  
+  <Card title="Raw output for scripting" icon="terminal">
+    Machine-readable output mode for piping to other tools and automation scripts
+  </Card>
+</CardGroup>
+
+## Example output
+
+```bash
+$ dirty ~/code
+ * apps/dashboard
+   apps/storefront
+ * libs/ui-kit [local]
+   libs/common
+ * services/auth
+   services/payments
+   tools/cli [local]
+ * tools/scripts [local]
+
+8 repos, 4 dirty, 3 local-only
+```
+
+**Understanding the markers:**
+- `*` — Repository has uncommitted changes (displayed in red)
+- `[local]` — Repository has no remotes configured (displayed in yellow)
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Dirty using Cargo in seconds
+  </Card>
+  
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Start scanning your repositories right away
+  </Card>
+</CardGroup>
+
+## How it works
+
+1. **Directory walking** — Recursively searches directories up to the specified depth looking for `.git` folders
+2. **Parallel inspection** — Inspects each repository in parallel using libgit2 (via [git2](https://crates.io/crates/git2)) and [rayon](https://crates.io/crates/rayon)
+3. **Status detection** — Checks for uncommitted/untracked changes and whether any remotes exist
+4. **Smart reporting** — Displays results with color-coded indicators and summary statistics

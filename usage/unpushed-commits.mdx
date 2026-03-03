@@ -1,0 +1,125 @@
+---
+title: Unpushed commits
+description: Track commits that are ahead of upstream branches
+---
+
+## Using the unpushed commits feature
+
+Use the `--include-unpushed` or `-u` flag to see which repositories have commits that haven't been pushed to their upstream branch:
+
+```bash
+dirty -u ~/code
+```
+
+## Understanding the output
+
+When enabled, repositories with unpushed commits show an ahead count:
+
+```bash
+$ dirty -u ~/code
+ * apps/dashboard [↑3]
+   apps/storefront
+ * libs/ui-kit [local]
+   libs/common [↑1]
+
+4 repos, 2 dirty, 1 local-only
+```
+
+The **`[↑N]`** indicator shows:
+- **`↑`** — Commits are ahead of upstream
+- **`N`** — Number of commits not yet pushed
+- Displayed in **blue** color
+
+<Info>
+The ahead count only appears when there are unpushed commits (N > 0). Repositories in sync with upstream won't show the indicator.
+</Info>
+
+## How it works
+
+The unpushed commits feature uses the `ahead_of_upstream` function to:
+
+1. Get the current HEAD commit
+2. Resolve the upstream tracking branch
+3. Calculate how many commits ahead the local branch is
+4. Display the count if greater than zero
+
+From the source code:
+
+```rust
+fn ahead_of_upstream(repo: &Repository) -> Option<usize> {
+    let head = repo.head().ok()?;
+    let head_oid = head.target()?;
+
+    // Resolve upstream tracking branch
+    let name = head.shorthand()?;
+    let branch = repo.find_branch(name, BranchType::Local).ok()?;
+    let upstream = branch.upstream().ok()?;
+
+    let upstream_ref = upstream.get();
+    let upstream_oid = upstream_ref.target()?;
+
+    // Calculate ahead/behind count vs upstream
+    let (ahead, _behind) = repo.graph_ahead_behind(head_oid, upstream_oid).ok()?;
+    Some(ahead)
+}
+```
+
+## Performance note
+
+<Warning>
+Using `--include-unpushed` is slower than the default scan because it needs to resolve the upstream tracking branch for each repository.
+</Warning>
+
+The performance impact comes from:
+- Resolving upstream tracking branches
+- Computing graph distance between local and remote commits
+- Additional git operations per repository
+
+For large directory scans, this can add noticeable time to the scan.
+
+## When to use this feature
+
+### Before ending your workday
+
+```bash
+# See what commits need pushing
+dirty -u ~/projects
+```
+
+### After working offline
+
+```bash
+# Check what accumulated while disconnected
+dirty -u ~/code
+```
+
+### Combined with filters
+
+```bash
+# Find dirty repos with unpushed commits
+dirty -du ~/code
+
+# Raw output for scripting
+dirty -dur ~/code | while read repo; do
+  echo "Pushing $repo..."
+  git -C "$repo" push
+done
+```
+
+<Tip>
+Combine `-du` to focus on repositories that have both uncommitted changes AND unpushed commits, helping you prioritize what needs attention.
+</Tip>
+
+## Edge cases
+
+The ahead count won't be calculated for:
+- **Detached HEAD** — Not on a branch
+- **Unborn branches** — No commits yet
+- **No upstream tracking** — Branch doesn't track a remote branch
+- **Local-only repositories** — No remote configured
+
+In these cases, the `[↑N]` indicator simply won't appear for those repositories.
+
+<Note>
+Repositories marked as `[local]` won't show unpushed commits since they have no remote to compare against.
+</Note>

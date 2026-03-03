@@ -1,80 +1,164 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with Dirty in minutes and start finding uncommitted changes
 ---
 
-## Get started in three steps
+This guide will walk you through your first scan with Dirty and help you understand the output.
 
-Get your documentation site running locally and make your first customization.
+## Basic usage
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Scan a directory">
+    To scan a directory for git repositories, run Dirty with a path:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    dirty ~/code
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    By default, Dirty searches up to 3 levels deep for git repositories.
+  </Step>
+  
+  <Step title="Review the results">
+    Dirty will display a list of all repositories found, with visual indicators for their status:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+     * apps/dashboard
+       apps/storefront
+     * libs/ui-kit [local]
+       libs/common
+     * services/auth
+       services/payments
+       tools/cli [local]
+     * tools/scripts [local]
+    
+    8 repos, 4 dirty, 3 local-only
+    ```
+    
+    <Note>
+    The scan runs in parallel using all available CPU cores, making it extremely fast even with hundreds of repositories.
+    </Note>
+  </Step>
+  
+  <Step title="Understand the output">
+    Each line represents one git repository, with optional markers:
+    
+    - **`*` (red)** — Repository has uncommitted or untracked changes
+    - **`[local]` (yellow)** — Repository has no remote configured
+    - **No marker** — Repository is clean and has a remote
+    
+    The summary line shows:
+    - Total number of repositories found
+    - Number of repos with uncommitted changes
+    - Number of repos without remotes
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Common use cases
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+### Scan with custom depth
 
-### Step 3: Go live
+Control how deep Dirty searches for repositories:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```bash
+# Only scan immediate subdirectories
+dirty -L 1 ~/code
+
+# Search up to 5 levels deep
+dirty -L 5 ~/projects
+```
+
+### Show only dirty repos
+
+Filter to see only repositories with uncommitted changes:
+
+```bash
+dirty -d ~/code
+```
+
+### Show only local-only repos
+
+Find repositories that don't have a remote configured:
+
+```bash
+dirty -l ~/code
+```
+
+### Check for unpushed commits
+
+See which repositories have commits ahead of their upstream branch:
+
+```bash
+dirty -u ~/code
+```
+
+This adds a `[↑n]` indicator showing how many commits are ahead:
+
+```bash
+ * apps/dashboard [↑3]
+   apps/storefront
+```
+
+<Warning>
+The `--include-unpushed` flag is slower because it needs to resolve upstream tracking branches for each repository.
+</Warning>
+
+### Combine filters and output raw paths
+
+You can combine multiple flags for advanced workflows:
+
+```bash
+# Show only dirty AND local repos, output as raw paths
+dirty -dlr ~/code
+```
+
+Raw output mode (`-r`) prints one path per line with no decorations, perfect for piping to other commands:
+
+```bash
+libs/ui-kit
+tools/scripts
+```
+
+## Example workflow
+
+Here's a typical workflow using Dirty:
+
+```bash
+# Check what repos have uncommitted work
+dirty -d ~/projects
+
+# Review the output and navigate to a specific repo
+cd ~/projects/apps/dashboard
+
+# Handle the uncommitted changes
+git add .
+git commit -m "Complete feature implementation"
+
+# Find repos that need remotes configured
+dirty -l ~/projects
+```
+
+<Tip>
+Use the raw output mode with shell scripts to automate operations across multiple repositories, like batch committing or adding remotes.
+</Tip>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+For detailed information about all available options and flags, check out these guides:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Basic Usage" icon="play" href="/usage/basic-usage">
+    Learn the fundamentals of scanning directories
+  </Card>
+  
+  <Card title="Filtering" icon="filter" href="/usage/filtering">
+    Filter results to show only dirty or local repos
+  </Card>
+  
+  <Card title="Command Reference" icon="book" href="/commands/flags">
+    Complete reference for all flags and options
+  </Card>
+  
+  <Card title="Scripting Guide" icon="code" href="/guides/scripting">
+    Use Dirty in your automation scripts
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,126 @@
+---
+title: Output formats
+description: Choose between formatted display or raw output for scripting
+---
+
+## Default formatted output
+
+By default, `dirty` provides a formatted output with color-coded status indicators:
+
+```bash
+$ dirty ~/code
+ * apps/dashboard
+   apps/storefront
+ * libs/ui-kit [local]
+   libs/common
+
+4 repos, 2 dirty, 1 local-only
+```
+
+The formatted output includes:
+- Color coding (red for `*`, yellow for `[local]`)
+- Visual alignment with spacing
+- Summary line with counts
+
+## Raw output mode
+
+Use the `--raw` or `-r` flag to get machine-readable output with one path per line:
+
+```bash
+dirty -r ~/code
+```
+
+### Example output
+
+```bash
+$ dirty -r ~/code
+apps/dashboard
+apps/storefront
+libs/ui-kit
+libs/common
+```
+
+In raw mode:
+- No status indicators or decorations
+- No colors or formatting
+- No summary line
+- One repository path per line
+
+<Info>
+Raw mode outputs relative paths from the scanned directory, making it ideal for piping to other commands.
+</Info>
+
+## Use cases for raw output
+
+### Piping to xargs
+
+Process each repository with another command:
+
+```bash
+# Pull all repositories
+dirty -r ~/code | xargs -I {} git -C {} pull
+
+# Show git status for all repositories
+dirty -r ~/code | xargs -I {} sh -c 'echo "=== {} ===" && git -C {} status'
+
+# Count commits in each repository
+dirty -r ~/code | xargs -I {} git -C {} rev-list --count HEAD
+```
+
+### Using while read loops
+
+Iterate over repositories in a shell script:
+
+```bash
+# Archive all dirty local-only repositories
+dirty -dlr ~/code | while read repo; do
+  echo "Backing up $repo..."
+  tar -czf "backup-$(basename $repo).tar.gz" "$repo"
+done
+```
+
+### Combining with filters
+
+Combine raw output with filters for targeted operations:
+
+```bash
+# Add remote to all local-only repositories
+dirty -lr ~/code | while read repo; do
+  git -C "$repo" remote add origin "git@github.com:user/$repo.git"
+done
+
+# Commit all dirty repositories
+dirty -dr ~/code | xargs -I {} git -C {} commit -am "Auto-commit"
+```
+
+<Tip>
+Combine `-dlr` flags to get raw output of repositories that are both dirty and local-only, perfect for scripting backup operations.
+</Tip>
+
+## Comparison
+
+### Formatted output (default)
+
+```bash
+$ dirty ~/code
+ * apps/dashboard
+   apps/storefront
+
+2 repos, 1 dirty, 0 local-only
+```
+
+**Best for:** Human-readable status at a glance
+
+### Raw output (`-r`)
+
+```bash
+$ dirty -r ~/code
+apps/dashboard
+apps/storefront
+```
+
+**Best for:** Scripting, piping to other commands, automation
+
+<Warning>
+When using raw output in scripts, be careful with paths containing spaces. Always quote variables: `git -C "$repo" status`
+</Warning>

@@ -1,0 +1,271 @@
+---
+title: Using Dirty in scripts
+description: Learn how to use Dirty in shell scripts and automation workflows
+---
+
+Dirty's `--raw` flag and exit codes make it ideal for shell scripting and automation. This guide shows practical examples of using Dirty in scripts.
+
+## Machine-readable output with --raw
+
+The `--raw` flag outputs one repository path per line with no decorations, making it easy to process in scripts.
+
+```bash
+# Normal output (human-friendly)
+$ dirty ~/code
+ * apps/dashboard
+   apps/storefront
+ * libs/ui-kit [local]
+
+3 repos, 2 dirty, 1 local-only
+
+# Raw output (script-friendly)
+$ dirty --raw ~/code
+apps/dashboard
+apps/storefront
+libs/ui-kit
+```
+
+<Note>
+The `--raw` flag suppresses colors, symbols, and summary statistics, outputting only repository paths relative to the scanned directory.
+</Note>
+
+## Exit codes
+
+Dirty uses standard exit codes for script control flow:
+
+- **Exit 0**: Found repositories matching the criteria
+- **Exit 1**: No repositories found, or no repositories matching filters
+
+```bash
+if dirty --dirty ~/code > /dev/null 2>&1; then
+    echo "Found dirty repos"
+else
+    echo "All repos are clean"
+fi
+```
+
+## Practical examples
+
+### Auto-commit all dirty repositories
+
+Automatically commit changes in all dirty repos with a timestamp:
+
+```bash
+#!/bin/bash
+set -e
+
+BASE_DIR="$HOME/code"
+COMMIT_MSG="Auto-commit: $(date +'%Y-%m-%d %H:%M:%S')"
+
+# Find all dirty repos
+dirty --dirty --raw "$BASE_DIR" | while IFS= read -r repo; do
+    echo "Committing changes in $repo..."
+    cd "$BASE_DIR/$repo"
+    git add -A
+    git commit -m "$COMMIT_MSG" || echo "Nothing to commit in $repo"
+done
+
+echo "Done!"
+```
+
+<Warning>
+Be careful with auto-commit scripts. Always review what will be committed or use `git add -p` for interactive staging.
+</Warning>
+
+### Pull all repositories with remotes
+
+Update all repositories that have remotes configured:
+
+```bash
+#!/bin/bash
+BASE_DIR="$HOME/code"
+
+# Find all repos (excluding local-only ones)
+dirty --raw "$BASE_DIR" > /tmp/all_repos.txt
+dirty --local --raw "$BASE_DIR" > /tmp/local_repos.txt
+
+# Get repos with remotes (set difference)
+grep -vxFf /tmp/local_repos.txt /tmp/all_repos.txt | while IFS= read -r repo; do
+    echo "Pulling $repo..."
+    git -C "$BASE_DIR/$repo" pull --rebase || echo "Failed to pull $repo"
+done
+
+rm /tmp/all_repos.txt /tmp/local_repos.txt
+```
+
+### Batch operations with xargs
+
+Use `xargs` to run git commands across multiple repositories:
+
+```bash
+# Fetch all repos in parallel (4 at a time)
+dirty --raw ~/code | xargs -I {} -P 4 git -C ~/code/{} fetch --all
+
+# Check status of all dirty repos
+dirty --dirty --raw ~/code | xargs -I {} sh -c 'echo "=== {} ===" && git -C ~/code/{} status -s'
+
+# Add a git remote to all local-only repos
+dirty --local --raw ~/code | xargs -I {} git -C ~/code/{} remote add origin https://github.com/user/{}.git
+```
+
+<Tip>
+Use `xargs -P` to run operations in parallel. This is especially useful for slow operations like `git fetch`.
+</Tip>
+
+### Using while read loops
+
+Process each repository with custom logic:
+
+```bash
+#!/bin/bash
+BASE_DIR="$HOME/code"
+
+dirty --dirty --raw "$BASE_DIR" | while IFS= read -r repo; do
+    full_path="$BASE_DIR/$repo"
+    
+    # Get commit count
+    commits=$(git -C "$full_path" rev-list --count HEAD)
+    
+    # Get number of changed files
+    changed=$(git -C "$full_path" status --porcelain | wc -l)
+    
+    echo "$repo: $changed files changed, $commits total commits"
+done
+```
+
+### Combining with other git commands
+
+Check which dirty repos also have unpushed commits:
+
+```bash
+#!/bin/bash
+BASE_DIR="$HOME/code"
+
+dirty --dirty --raw "$BASE_DIR" | while IFS= read -r repo; do
+    cd "$BASE_DIR/$repo"
+    
+    # Check if branch has upstream
+    if git rev-parse --abbrev-ref @{upstream} >/dev/null 2>&1; then
+        # Check if ahead of upstream
+        ahead=$(git rev-list --count @{upstream}..HEAD)
+        if [ "$ahead" -gt 0 ]; then
+            echo "$repo: dirty + $ahead unpushed commits"
+        else
+            echo "$repo: dirty (no unpushed commits)"
+        fi
+    else
+        echo "$repo: dirty (no upstream branch)"
+    fi
+done
+```
+
+<Info>
+Dirty has a built-in `--include-unpushed` flag that shows unpushed commits, but this example demonstrates combining Dirty with custom git commands.
+</Info>
+
+### Create a backup script
+
+Archive all dirty repositories before cleanup:
+
+```bash
+#!/bin/bash
+set -e
+
+BASE_DIR="$HOME/code"
+BACKUP_DIR="$HOME/backups/repos-$(date +%Y%m%d)"
+
+if ! dirty --dirty --raw "$BASE_DIR" > /dev/null 2>&1; then
+    echo "No dirty repos found. Nothing to backup."
+    exit 0
+fi
+
+mkdir -p "$BACKUP_DIR"
+
+dirty --dirty --raw "$BASE_DIR" | while IFS= read -r repo; do
+    repo_name=$(basename "$repo")
+    echo "Backing up $repo..."
+    tar -czf "$BACKUP_DIR/${repo_name}.tar.gz" -C "$BASE_DIR" "$repo"
+done
+
+echo "Backup complete: $BACKUP_DIR"
+```
+
+### Generate a report
+
+Create a markdown report of repository status:
+
+```bash
+#!/bin/bash
+BASE_DIR="$HOME/code"
+REPORT="repo-status-$(date +%Y%m%d).md"
+
+cat > "$REPORT" << EOF
+# Repository Status Report
+Generated: $(date)
+
+## Dirty Repositories
+EOF
+
+if dirty --dirty --raw "$BASE_DIR" > /dev/null 2>&1; then
+    dirty --dirty --raw "$BASE_DIR" | while IFS= read -r repo; do
+        echo "- \`$repo\`" >> "$REPORT"
+    done
+else
+    echo "None" >> "$REPORT"
+fi
+
+cat >> "$REPORT" << EOF
+
+## Local-Only Repositories
+EOF
+
+if dirty --local --raw "$BASE_DIR" > /dev/null 2>&1; then
+    dirty --local --raw "$BASE_DIR" | while IFS= read -r repo; do
+        echo "- \`$repo\`" >> "$REPORT"
+    done
+else
+    echo "None" >> "$REPORT"
+fi
+
+echo "Report saved to $REPORT"
+```
+
+## Best practices
+
+<Steps>
+
+### Always use --raw in scripts
+
+The `--raw` flag ensures consistent output that won't break if Dirty's display format changes.
+
+### Handle errors gracefully
+
+Use `|| true` or check exit codes to prevent scripts from stopping on individual failures:
+
+```bash
+dirty --raw ~/code | while read -r repo; do
+    git -C ~/code/"$repo" pull || echo "Failed: $repo"
+done
+```
+
+### Quote variables
+
+Always quote variables to handle paths with spaces:
+
+```bash
+# Good
+git -C "$BASE_DIR/$repo" status
+
+# Bad (breaks on spaces)
+git -C $BASE_DIR/$repo status
+```
+
+### Test with edge cases
+
+Test your scripts with:
+- Repositories with no commits
+- Detached HEAD state
+- Repositories with spaces in names
+- Empty results from Dirty
+
+</Steps>

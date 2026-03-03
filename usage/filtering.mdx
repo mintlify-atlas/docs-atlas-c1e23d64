@@ -1,0 +1,116 @@
+---
+title: Filtering
+description: Filter repositories by status to focus on what matters
+---
+
+## Show only dirty repositories
+
+Use the `--dirty` or `-d` flag to show only repositories with uncommitted changes:
+
+```bash
+dirty -d ~/code
+```
+
+This filters out all clean repositories, showing only those with:
+- Modified files
+- Staged changes
+- Untracked files
+
+### Example output
+
+```bash
+$ dirty -d ~/code
+ * apps/dashboard
+ * libs/ui-kit [local]
+ * services/auth
+ * tools/scripts [local]
+
+4 repos, 4 dirty, 2 local-only
+```
+
+<Tip>
+Use `dirty -d` before leaving work to quickly see which repositories have uncommitted changes that might need attention.
+</Tip>
+
+## Show only local-only repositories
+
+Use the `--local` or `-l` flag to show only repositories without remote configurations:
+
+```bash
+dirty -l ~/code
+```
+
+This is useful for finding:
+- Experimental projects not yet pushed to a remote
+- Repositories that need remote setup
+- Local-only work that might need backing up
+
+### Example output
+
+```bash
+$ dirty -l ~/code
+ * libs/ui-kit [local]
+   tools/cli [local]
+ * tools/scripts [local]
+
+3 repos, 2 dirty, 3 local-only
+```
+
+<Warning>
+Local-only repositories have no backup on a remote server. Consider adding a remote or backing them up regularly.
+</Warning>
+
+## Combining filters
+
+You can combine both filters to find repositories that are both dirty and local-only:
+
+```bash
+dirty -dl ~/code
+```
+
+Or using the long form:
+
+```bash
+dirty --dirty --local ~/code
+```
+
+### Example output
+
+```bash
+$ dirty -dl ~/code
+ * libs/ui-kit [local]
+ * tools/scripts [local]
+
+2 repos, 2 dirty, 2 local-only
+```
+
+<Note>
+When filters are combined, only repositories matching ALL criteria are shown.
+</Note>
+
+## Use cases
+
+### Before shutting down
+
+```bash
+# Check for uncommitted work
+dirty -d ~/projects
+```
+
+### Finding repositories to backup
+
+```bash
+# Find local-only repos that need remotes
+dirty -l ~/code
+```
+
+### Critical uncommitted work
+
+```bash
+# Find work that's both uncommitted AND not backed up
+dirty -dl ~/projects
+```
+
+<Info>
+The summary line at the bottom always shows the total count across all found repositories, even when filters are applied.
+</Info>

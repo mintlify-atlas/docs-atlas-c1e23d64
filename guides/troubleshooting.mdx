@@ -1,0 +1,501 @@
+---
+title: Troubleshooting
+description: Common issues and solutions when using Dirty
+---
+
+This guide covers common issues you might encounter when using Dirty and how to resolve them.
+
+## Common errors
+
+### "cannot access" errors
+
+This error occurs when Dirty cannot access the specified path:
+
+```bash
+$ dirty /nonexistent
+dirty: cannot access '/nonexistent'
+```
+
+<Accordion title="Causes and solutions">
+
+**Non-existent path**
+```bash
+# Check if path exists
+ls /path/to/directory
+
+# Use an existing path
+dirty ~/code
+```
+
+**Permission denied**
+```bash
+# Check permissions
+ls -la /path/to/directory
+
+# Fix permissions (if appropriate)
+chmod +r /path/to/directory
+
+# Or run as user with access
+sudo dirty /root/projects
+```
+
+**Broken symbolic link**
+```bash
+# Check if it's a broken symlink
+file /path/to/directory
+
+# Use the actual target path instead
+readlink -f /path/to/symlink
+dirty $(readlink -f /path/to/symlink)
+```
+
+**Relative path issues**
+```bash
+# Dirty converts paths with canonicalize() which requires the path to exist
+# Use absolute paths or ensure relative paths are correct
+pwd  # Check current directory
+dirty ./code  # Ensure ./code exists relative to pwd
+```
+
+</Accordion>
+
+### "No git repos found"
+
+This error means Dirty scanned the directory but didn't find any `.git` folders:
+
+```bash
+$ dirty ~/empty-dir
+No git repos found in /home/user/empty-dir
+```
+
+<Accordion title="Solutions">
+
+**Increase search depth**
+
+The default depth is 3. Your repositories might be nested deeper:
+
+```bash
+# Try deeper scans
+dirty -L 5 ~/code
+dirty -L 10 ~/code
+```
+
+**Check if repositories exist**
+
+```bash
+# Manual verification
+find ~/code -name ".git" -type d
+
+# Check first few levels
+ls -la ~/code/*/      # depth 1
+ls -la ~/code/*/*/    # depth 2
+```
+
+**Verify directory structure**
+
+Dirty looks for `.git` directories, not `.git` files (which are used by submodules and worktrees):
+
+```bash
+# This is a repository
+project/.git/         # ✓ Found by Dirty
+
+# This is a submodule/worktree reference
+submodule/.git        # ✗ Not found by Dirty
+```
+
+**Scan the correct directory**
+
+```bash
+# Wrong: scanning home directory with default depth
+dirty ~
+
+# Right: scanning code directory specifically
+dirty ~/code
+```
+
+</Accordion>
+
+### "No matching repos found"
+
+This error means Dirty found repositories, but none matched your filters:
+
+```bash
+$ dirty --dirty ~/code
+No matching repos found
+```
+
+<Accordion title="Understanding filters">
+
+**You used --dirty but all repos are clean**
+
+```bash
+# No dirty repos found
+dirty --dirty ~/code  # Error
+
+# Remove filter to see all repos
+dirty ~/code  # Shows all repos
+```
+
+**You used --local but all repos have remotes**
+
+```bash
+# No local-only repos found
+dirty --local ~/code  # Error
+
+# Check without filter
+dirty ~/code  # Shows all repos
+```
+
+**Combined filters are too restrictive**
+
+```bash
+# Looking for repos that are both dirty AND local-only
+dirty --dirty --local ~/code  # Might find none
+
+# Try filters separately
+dirty --dirty ~/code
+dirty --local ~/code
+```
+
+**This is actually good news**
+
+If `dirty --dirty ~/code` returns "No matching repos found", it means all your repositories are clean!
+
+```bash
+# Verify all repos are clean
+if ! dirty --dirty ~/code > /dev/null 2>&1; then
+    echo "All repos are clean!"
+fi
+```
+
+</Accordion>
+
+## Symbolic links
+
+Dirty skips symbolic links to avoid infinite loops and duplicate scanning:
+
+```rust
+// From main.rs:64
+if path.is_dir() && !path.is_symlink() {
+    collect_repos(&path, max_depth, depth + 1, repos);
+}
+```
+
+<Accordion title="Working with symbolic links">
+
+**Why symbolic links are skipped**
+
+- **Prevents infinite loops**: Circular symlinks would cause infinite recursion
+- **Avoids duplicates**: Same repo could be found multiple times
+- **Performance**: Symlink resolution adds overhead
+
+**How to scan repositories behind symlinks**
+
+Resolve the symlink and scan the actual directory:
+
+```bash
+# Won't work: symlink is skipped
+dirty ~/code-link
+
+# Solution 1: Use the real path
+readlink -f ~/code-link
+dirty $(readlink -f ~/code-link)
+
+# Solution 2: Use realpath
+dirty $(realpath ~/code-link)
+
+# Solution 3: cd into it first
+cd ~/code-link
+dirty .
+```
+
+**Detecting symlinked repositories**
+
+If you suspect Dirty is missing repositories due to symlinks:
+
+```bash
+# Find symlinks in your code directory
+find ~/code -type l -ls
+
+# Find git repos (including through symlinks)
+find -L ~/code -name ".git" -type d
+
+# Compare with Dirty's output
+dirty --raw ~/code
+```
+
+</Accordion>
+
+## Nested git repositories
+
+Dirty stops at the first `.git` directory and doesn't scan subdirectories within repositories:
+
+```rust
+// From main.rs:55-58
+if dir.join(".git").exists() {
+    repos.push(dir.to_path_buf());
+    return;  // Stop recursing into subdirectories
+}
+```
+
+<Accordion title="Understanding nested repository behavior">
+
+**Why Dirty stops at .git directories**
+
+- **Performance**: Avoids traversing large repository file trees
+- **Correctness**: Nested `.git` folders inside a repo are usually submodules or invalid
+- **Predictability**: One repository = one result
+
+**What gets detected**
+
+```
+projects/
+├── app/
+│   ├── .git/           # ✓ Detected
+│   └── vendor/
+│       └── lib/
+│           └── .git/   # ✗ Skipped (inside app repository)
+└── tools/
+    └── .git/           # ✓ Detected
+```
+
+**Intentionally nested repositories**
+
+If you have repositories nested inside other repositories (not as submodules), you'll need to scan them separately:
+
+```bash
+# Only finds outer repo
+dirty ~/projects
+
+# Find inner repo directly
+dirty ~/projects/app/vendor/lib
+```
+
+**Finding all .git directories manually**
+
+To find all `.git` directories regardless of nesting:
+
+```bash
+# This finds ALL .git directories, even nested ones
+find ~/code -name ".git" -type d
+
+# Dirty only finds top-level repos
+dirty --raw ~/code
+```
+
+</Accordion>
+
+## SIGPIPE handling
+
+Dirty handles SIGPIPE signals to work correctly in Unix pipelines:
+
+```rust
+// From main.rs:165
+unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+```
+
+<Accordion title="What is SIGPIPE and why does it matter?">
+
+**The problem**
+
+When piping output to commands like `head`, the receiving command might close the pipe before Dirty finishes writing:
+
+```bash
+# head closes pipe after reading first line
+dirty --raw ~/code | head -n 1
+
+# Without SIGPIPE handling, Dirty would panic
+# With SIGPIPE handling, Dirty exits gracefully
+```
+
+**Default Rust behavior**
+
+By default, Rust panics on SIGPIPE, which creates ugly error messages:
+
+```bash
+# Without SIGPIPE handling:
+$ dirty --raw ~/code | head -n 1
+app/dashboard
+thread 'main' panicked at 'failed printing to stdout: Broken pipe (os error 32)'
+
+# With SIGPIPE handling:
+$ dirty --raw ~/code | head -n 1
+app/dashboard
+```
+
+**When this happens**
+
+SIGPIPE occurs in these scenarios:
+
+```bash
+# Piping to head/tail
+dirty --raw ~/code | head -n 5
+
+# Piping to grep (if grep exits early)
+dirty --raw ~/code | grep -m 1 "app"
+
+# Piping to any command that closes the pipe early
+dirty --raw ~/code | while read repo; do echo "$repo"; break; done
+```
+
+**You don't need to worry about this**
+
+This is handled automatically by Dirty. It just works correctly in pipelines.
+
+</Accordion>
+
+## Frequently asked questions
+
+<Accordion title="Why is --include-unpushed so slow?">
+
+The `--include-unpushed` flag requires resolving the upstream tracking branch for each repository and computing graph distance, which involves:
+
+1. Finding the current branch
+2. Resolving its upstream tracking branch
+3. Computing commits ahead/behind
+4. Handling cases like detached HEAD, no upstream, etc.
+
+This is significantly slower than just checking if files have changed. Only use this flag when you specifically need unpushed commit information.
+
+```bash
+# Fast: basic dirty check
+dirty ~/code
+
+# Slow: includes upstream comparison
+dirty --include-unpushed ~/code
+```
+
+</Accordion>
+
+<Accordion title="Can I exclude certain directories?">
+
+Dirty doesn't have a built-in exclude mechanism, but you can use shell filtering:
+
+```bash
+# Exclude node_modules directories
+dirty --raw ~/code | grep -v "node_modules"
+
+# Exclude multiple patterns
+dirty --raw ~/code | grep -vE "(node_modules|target|build)"
+
+# In a script with filtering
+dirty --raw ~/code | while read repo; do
+    if [[ "$repo" != *"node_modules"* ]]; then
+        echo "$repo"
+    fi
+done
+```
+
+</Accordion>
+
+<Accordion title="How do I scan just one repository?">
+
+Point Dirty directly at the repository:
+
+```bash
+# Scan a single repo (depth 0 is fine)
+dirty -L 0 ~/code/my-app
+
+# Or use git status directly
+git -C ~/code/my-app status
+```
+
+Dirty is designed for scanning multiple repositories. For single repositories, standard `git` commands are more appropriate.
+
+</Accordion>
+
+<Accordion title="Why are my git worktrees not detected?">
+
+Git worktrees use a `.git` file (not directory) that points to the actual git directory:
+
+```bash
+# Main repository
+main/.git/              # ✓ Detected by Dirty
+
+# Worktree (has .git file, not directory)
+worktree/.git           # ✗ Not detected by Dirty
+```
+
+Dirty only detects directories with a `.git/` folder. Worktrees and submodules (which use `.git` files) are not detected as separate repositories.
+
+To scan worktrees, scan the main repository instead:
+
+```bash
+# Scan main repo (dirty status includes worktrees)
+dirty ~/code/main
+```
+
+</Accordion>
+
+<Accordion title="Does Dirty work with bare repositories?">
+
+No. Dirty looks for `.git` directories inside working trees. Bare repositories (which are the git directory itself) are not detected.
+
+```bash
+# Regular repo: has .git/ subdirectory
+app/
+├── .git/               # ✓ Detected
+└── src/
+
+# Bare repo: IS the git directory
+app.git/
+├── HEAD                # ✗ Not detected
+├── objects/
+└── refs/
+```
+
+If you need to check bare repositories, use git commands directly:
+
+```bash
+git --git-dir=/path/to/bare.git status
+```
+
+</Accordion>
+
+<Accordion title="Can I use Dirty in non-interactive scripts?">
+
+Yes! Use the `--raw` flag and check exit codes:
+
+```bash
+#!/bin/bash
+set -e  # Exit on error
+
+if dirty --dirty --raw ~/code > /tmp/dirty-repos.txt 2>&1; then
+    # Found dirty repos
+    while read repo; do
+        echo "Processing $repo"
+    done < /tmp/dirty-repos.txt
+else
+    # No dirty repos (or error)
+    echo "No dirty repos found"
+fi
+```
+
+See the [scripting guide](/guides/scripting) for more examples.
+
+</Accordion>
+
+## Still having issues?
+
+If you encounter a bug or unexpected behavior:
+
+1. **Check your Dirty version**: Ensure you have the latest version
+   ```bash
+   dirty --version
+   cargo install --git https://github.com/iamkaf/dirty  # Update
+   ```
+
+2. **Test with a simple case**: Try scanning a directory you know has repositories
+   ```bash
+   dirty -L 1 ~/code
+   ```
+
+3. **Report the issue**: Open an issue on GitHub with:
+   - Dirty version
+   - Command you ran
+   - Expected vs actual behavior
+   - Directory structure (if relevant)
+
+<Note>
+Dirty is open source! You can view the source code and report issues at [github.com/iamkaf/dirty](https://github.com/iamkaf/dirty).
+</Note>
