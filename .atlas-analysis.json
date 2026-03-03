@@ -1,0 +1,60 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Dirty",
+  "projectDescription": "A fast CLI that scans directories for git repositories and shows uncommitted changes and local-only repos.",
+  "theme": "aspen",
+  "primaryColor": "#E63946",
+  "lightColor": "#F77F00",
+  "darkColor": "#A4161A",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "introduction",
+          "installation",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Usage",
+        "pages": [
+          "usage/basic-usage",
+          "usage/filtering",
+          "usage/output-formats",
+          "usage/unpushed-commits"
+        ]
+      },
+      {
+        "group": "Command Reference",
+        "pages": [
+          "commands/overview",
+          "commands/flags"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/scripting",
+          "guides/performance",
+          "guides/troubleshooting"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Fast parallel repository scanning using Rust and rayon",
+    "Detects uncommitted changes and local-only repositories",
+    "Configurable depth and filtering options",
+    "Raw output mode for scripting and piping",
+    "Unpushed commits tracking (ahead of upstream)"
+  ],
+  "publicApiSurface": [
+    "dirty <path> - Scan directory for git repositories",
+    "--depth/-L <n> - Set maximum directory depth (default: 3)",
+    "--dirty/-d - Show only repositories with uncommitted changes",
+    "--local/-l - Show only repositories with no remotes",
+    "--include-unpushed/-u - Include unpushed commit information",
+    "--raw/-r - Output raw paths for piping"
+  ]
+}
